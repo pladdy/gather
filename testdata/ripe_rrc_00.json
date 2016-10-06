@@ -1,6 +1,6 @@
 {
-  "download host": "http://data.ris.ripe.net/rrc00/$Year.$Month/",
+  "file list host": "http://data.ris.ripe.net/rrc00/$Year.$Month/",
+  "download root": "http://data.ris.ripe.net/rrc00/$Year.$Month/",
   "file pattern": "href=\"(bview.$Year$PaddedMonth$PaddedDay.*.gz)\"",
-  "files to get": "latest",
-  "test key": "test value"
+  "files to get": "all"
 }
