@@ -52,7 +52,7 @@ func main() {
 			lumberjack.Panic("Don't know which files to get; update config with 'latest' or 'all'")
 		}
 
-	} else {
+	} else if config["download host"] != nil {
 		filesToDownload =
 			append(filesToDownload, fmt.Sprintf("%v", config["download host"]))
 	}
