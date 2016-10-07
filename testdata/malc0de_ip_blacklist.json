@@ -1,3 +1,4 @@
 {
-  "host": "http://malc0de.com/bl/IP_Blacklist.txt"
+  "download host": "http://malc0de.com/bl/IP_Blacklist.txt",
+  "download name": "malc0de_ip_blacklist.txt"
 }
