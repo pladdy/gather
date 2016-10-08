@@ -1,3 +1,5 @@
+// Gather will download files over http; it requires a JSON config file to
+// direct it's activities.
 package main
 
 import (
@@ -8,6 +10,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"time"
@@ -16,6 +19,22 @@ import (
 	"github.com/pladdy/timepiece"
 )
 
+// A gather config has settings that dictate what hosts have data pulled
+// from, the files that should be gathered, etc.
+//
+// Keys grouped together are required to be set in the config
+type GatherConfig struct {
+	// Simple download
+	DownloadHost string // Host to download from
+	DownloadName string // Name to be given to download file
+
+	// Scrape download
+	FileListHost string // Host to scrape files from
+	DownloadRoot string // For scraping, the root to use for matching files
+	FilePattern  string // Pattern to look for when scraping for files
+	FilesToGet   string // 'all' or 'latest'; needed for scraping
+}
+
 func main() {
 	lumberjack.StartLogging()
 
@@ -23,14 +42,17 @@ func main() {
 		lumberjack.Fatal("Config file is required as an argument")
 	}
 
-	config := readConfig(os.Args[1], time.Now())
+	config := unmarshalGatherConfig(os.Args[1], time.Now())
 
-	var filesToDownload []string
-	if config["file list host"] != nil {
-		filesToDownload = getFilesToDownload(config)
+	if config.isValid() != true {
+		lumberjack.Error("Invalid config settings, update config according to GatherConfig struct.")
+		printDocs()
+		os.Exit(1)
 	}
 
-	if len(filesToDownload) == 0 && config["file list host"] != nil {
+	filesToDownload := filesToDownload(config)
+
+	if len(filesToDownload) == 0 && config.FileListHost != "" {
 		lumberjack.Info("No files to download")
 		os.Exit(0)
 	}
@@ -39,22 +61,20 @@ func main() {
 }
 
 // Given a config and a list of files, download them
-func downloadFiles(config map[string]interface{}, filesToDownload []string) {
+func downloadFiles(config GatherConfig, filesToDownload []string) {
 	if filesToDownload == nil {
-		gatherData(
-			fmt.Sprintf("%v", config["download host"]),
-			"./"+fmt.Sprintf("%v", config["download name"]))
+		downloadFile(config.DownloadHost, config.DownloadName)
 	} else {
 		for _, file := range filesToDownload {
-			downloadLink := fmt.Sprintf("%v", config["download root"]) + "/" + file
+			downloadLink := config.DownloadRoot + "/" + file
 			filePath := "./" + file
-			gatherData(downloadLink, filePath)
+			downloadFile(downloadLink, filePath)
 		}
 	}
 }
 
 // Given a uri and a file path, get the data and save to the path
-func gatherData(downloadLink string, filePath string) error {
+func downloadFile(downloadLink string, filePath string) error {
 	lumberjack.Info("Getting response from " + downloadLink)
 
 	response, err := http.Get(downloadLink)
@@ -80,53 +100,36 @@ func gatherData(downloadLink string, filePath string) error {
 	return err
 }
 
-// Given the config, reach out to host and identify what files to download
-func getFilesToDownload(config map[string]interface{}) []string {
-	var filesToDownload []string
+func fileList(config GatherConfig) *http.Response {
+	lumberjack.Info("Calling Get on %v", config.FileListHost)
 
-	matchingFiles, err := getMatchingFiles(config)
-	if err != nil {
-		lumberjack.Fatal("Failed to get file list")
-	}
-
-	if len(matchingFiles) == 0 {
-		lumberjack.Info("No files found to download")
-		os.Exit(0)
-	}
-
-	switch config["files to get"] {
-	case "latest":
-		lumberjack.Info("Getting latest file from matches")
-		sort.Strings(matchingFiles)
-		filesToDownload =
-			append(filesToDownload, matchingFiles[len(matchingFiles)-1])
-		lumberjack.Info("Latest file is %v", filesToDownload[0])
-	case "all":
-		lumberjack.Info("Getting all matching files")
-		filesToDownload = matchingFiles
-		lumberjack.Info("Files to download: %v", filesToDownload)
-	default:
-		lumberjack.Panic("Don't know which files to get; update config with 'latest' or 'all'")
-	}
-
-	return filesToDownload
-}
-
-func getMatchingFiles(config map[string]interface{}) (files []string, err error) {
-	lumberjack.Info("Calling Get on %v", config["file list host"])
-
-	response, err := http.Get(fmt.Sprintf("%v", config["file list host"]))
+	response, err := http.Get(config.FileListHost)
 	if err != nil {
 		lumberjack.Panic("Error in Get: ", err)
 	}
-	defer response.Body.Close()
 
-	return findMatchingFiles(config, response)
+	return response
 }
 
-// Given a config, an http response, return matching files from response
-func findMatchingFiles(config map[string]interface{}, response *http.Response) (files []string, err error) {
-	fileRegexp := regexp.MustCompile(fmt.Sprintf("%v", config["file pattern"]))
+// Given the config, reach out to the file list host and identify what files to
+// download
+func filesToDownload(config GatherConfig) []string {
+	var filesToDownload []string
+
+	if config.FileListHost != "" {
+		matchingFiles := findMatchingFiles(config.FilePattern, fileList(config))
+		filesToDownload = pickFilesToGet(matchingFiles, config.FilesToGet)
+	}
+
+	lumberjack.Info("Files to download: %v", filesToDownload)
+	return filesToDownload
+}
+
+// Given a string to match and an http response, return matching files from response
+func findMatchingFiles(stringToFind string, response *http.Response) []string {
+	defer response.Body.Close()
+
+	fileRegexp := regexp.MustCompile(stringToFind)
 	scanner := bufio.NewScanner(response.Body)
 	var matchingFiles []string
 
@@ -137,16 +140,48 @@ func findMatchingFiles(config map[string]interface{}, response *http.Response) (
 			matchingFiles = append(matchingFiles, match[0][1])
 		}
 	}
+
 	if err := scanner.Err(); err != nil {
 		lumberjack.Panic("Error in scanning response: ", err)
 	}
 
-	return matchingFiles, err
+	return matchingFiles
+}
+
+// Given a list of file and a directive for which ones to return, return the
+// files asked for
+func pickFilesToGet(files []string, filesToGet string) []string {
+	var pickedFiles []string
+
+	if len(files) > 0 {
+		switch filesToGet {
+		case "latest":
+			sort.Strings(files)
+			pickedFiles =
+				append(pickedFiles, files[len(files)-1])
+		case "all":
+			pickedFiles = files
+		default:
+			lumberjack.Panic("Don't know which 'files to get'; update config with key set to 'latest' or 'all'")
+		}
+	}
+
+	return pickedFiles
+}
+
+func printDocs() {
+	command := exec.Command("godoc", "-src", "github.com/pladdy/gather")
+	output, err := command.Output()
+	if err != nil {
+		lumberjack.Warn("I tried to print out the godoc docs but it didn't work.  Sorry.")
+	}
+
+	lumberjack.Error(fmt.Sprintf("%s", output))
 }
 
 // Given a JSON config file name, read in the file and return a go lang
 // data structure
-func readConfig(fileName string, theTime time.Time) map[string]interface{} {
+func unmarshalGatherConfig(fileName string, theTime time.Time) GatherConfig {
 	lumberjack.Info("Reading in config " + fileName)
 
 	contents, err := ioutil.ReadFile(fileName)
@@ -161,11 +196,29 @@ func readConfig(fileName string, theTime time.Time) map[string]interface{} {
 
 	lumberjack.Info("Unmarshalling config from JSON")
 
-	var configJson interface{}
-	err = json.Unmarshal([]byte(replacedContents), &configJson)
+	var config GatherConfig
+	err = json.Unmarshal([]byte(replacedContents), &config)
 	if err != nil {
-		lumberjack.Fatal("Failed to Unmarshal JSON; contents: %v", configJson)
+		lumberjack.Fatal("Failed to Unmarshal JSON; contents: %v", config)
 	}
 
-	return configJson.(map[string]interface{})
+	return config
+}
+
+// Given a GatherCOnfig, validate it
+func (config *GatherConfig) isValid() bool {
+	itIsValid := false
+
+	if config.DownloadHost != "" && config.DownloadName != "" {
+		itIsValid = true
+	}
+
+	if config.FileListHost != "" &&
+		config.DownloadRoot != "" &&
+		config.FilePattern != "" &&
+		config.FilesToGet != "" {
+		itIsValid = true
+	}
+
+	return itIsValid
 }
