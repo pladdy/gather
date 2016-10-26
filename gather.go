@@ -37,6 +37,7 @@ type GatherConfig struct {
 
 func main() {
 	lumberjack.StartLogging()
+	processStart := time.Now()
 
 	if len(os.Args) == 1 {
 		lumberjack.Fatal("Config file is required as an argument")
@@ -58,6 +59,7 @@ func main() {
 	}
 
 	downloadFiles(config, filesToDownload)
+	lumberjack.Info("Download complete in %v", time.Since(processStart))
 }
 
 // Given a config and a list of files, download them
@@ -79,7 +81,7 @@ func downloadFile(downloadLink string, filePath string) error {
 
 	response, err := http.Get(downloadLink)
 	if err != nil {
-		lumberjack.Panic("Error in Get: %v", err)
+		lumberjack.Panic("Error Getting %v: %v", downloadLink, err)
 	}
 	defer response.Body.Close()
 
@@ -90,6 +92,8 @@ func downloadFile(downloadLink string, filePath string) error {
 		lumberjack.Panic("Error creating file %v", err)
 	}
 	defer downloadHandle.Close()
+
+	go trackDownload(response.ContentLength, filePath)
 
 	_, err = io.Copy(downloadHandle, response.Body)
 	if err != nil {
@@ -169,6 +173,7 @@ func pickFilesToGet(files []string, filesToGet string) []string {
 	return pickedFiles
 }
 
+// Print godoc for gather
 func printDocs() {
 	command := exec.Command("godoc", "-src", "github.com/pladdy/gather")
 	output, err := command.Output()
@@ -177,6 +182,32 @@ func printDocs() {
 	}
 
 	lumberjack.Error(fmt.Sprintf("%s", output))
+}
+
+// Given a ContentLength and a file, peridically log how much is downloaded
+func trackDownload(contentLength int64, filePath string) {
+	if contentLength == -1 {
+		lumberjack.Warn("Content-Length not available, can't track download")
+		return
+	}
+
+	var fileSize int64 = 0
+	const TimeToSleep int64 = 15
+
+	for fileSize < contentLength {
+		time.Sleep(time.Second * time.Duration(TimeToSleep))
+
+		fileInfo, err := os.Stat(filePath)
+		if err != nil {
+			lumberjack.Warn("Couldn't get info on file %v; not tracking", filePath)
+		}
+
+		fileSize = fileInfo.Size()
+		progress := float64(fileSize) / float64(contentLength) * 100
+		lumberjack.Info("Download progress: %.2f%%", progress)
+	}
+
+	return
 }
 
 // Given a JSON config file name, read in the file and return a go lang
