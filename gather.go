@@ -24,6 +24,8 @@ import (
 //
 // Keys grouped together are required to be set in the config
 type GatherConfig struct {
+	DestinationFilePrefix string
+
 	// Simple download
 	DownloadHost string // Host to download from
 	DownloadName string // Name to be given to download file
@@ -59,7 +61,7 @@ func main() {
 	}
 
 	downloadFiles(config, filesToDownload)
-	lumberjack.Info("Download complete in %v", time.Since(processStart))
+	lumberjack.Info("Download completed in %v", time.Since(processStart))
 }
 
 // Given a config and a list of files, download them
@@ -69,7 +71,8 @@ func downloadFiles(config GatherConfig, filesToDownload []string) {
 	} else {
 		for _, file := range filesToDownload {
 			downloadLink := config.DownloadRoot + "/" + file
-			filePath := "./" + file
+
+			filePath := "./" + config.DestinationFilePrefix + file
 			downloadFile(downloadLink, filePath)
 		}
 	}
@@ -85,7 +88,7 @@ func downloadFile(downloadLink string, filePath string) error {
 	}
 	defer response.Body.Close()
 
-	lumberjack.Info("Downloading " + downloadLink)
+	lumberjack.Info("Downloading " + downloadLink + " to " + filePath)
 
 	downloadHandle, err := os.Create(filePath)
 	if err != nil {
@@ -104,7 +107,7 @@ func downloadFile(downloadLink string, filePath string) error {
 	return err
 }
 
-func fileList(config GatherConfig) *http.Response {
+func remoteFileList(config GatherConfig) *http.Response {
 	lumberjack.Info("Calling Get on %v", config.FileListHost)
 
 	response, err := http.Get(config.FileListHost)
@@ -121,7 +124,7 @@ func filesToDownload(config GatherConfig) []string {
 	var filesToDownload []string
 
 	if config.FileListHost != "" {
-		matchingFiles := findMatchingFiles(config.FilePattern, fileList(config))
+		matchingFiles := findMatchingFiles(config.FilePattern, remoteFileList(config))
 		filesToDownload = pickFilesToGet(matchingFiles, config.FilesToGet)
 	}
 
@@ -206,8 +209,6 @@ func trackDownload(contentLength int64, filePath string) {
 		progress := float64(fileSize) / float64(contentLength) * 100
 		lumberjack.Info("Download progress: %.2f%%", progress)
 	}
-
-	return
 }
 
 // Given a JSON config file name, read in the file and return a go lang
