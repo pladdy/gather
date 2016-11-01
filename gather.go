@@ -38,121 +38,110 @@ type GatherConfig struct {
 }
 
 func main() {
-	lumberjack.StartLogging()
+	logger := lumberjack.New()
 	processStart := time.Now()
 
 	if len(os.Args) == 1 {
-		lumberjack.Fatal("Config file is required as an argument")
+		logger.Fatal("Config file is required as an argument")
 	}
 
+	logger.Info("Reading in config " + os.Args[1])
 	config := unmarshalGatherConfig(os.Args[1], time.Now())
 
 	if config.isValid() != true {
-		lumberjack.Error("Invalid config settings, update config according to GatherConfig struct.")
+		logger.Error("Invalid config settings, update config according to GatherConfig struct.")
 		printDocs()
 		os.Exit(1)
 	}
 
-	filesToDownload := filesToDownload(config)
+	filesToDownload := filesToDownload(config, logger)
+	logger.Info("Files to download: %v", filesToDownload)
 
 	if len(filesToDownload) == 0 && config.FileListHost != "" {
-		lumberjack.Info("No files to download")
+		logger.Info("No files to download")
 		os.Exit(0)
 	}
 
-	downloadFiles(config, filesToDownload)
-	lumberjack.Info("Download completed in %v", time.Since(processStart))
+	downloadFiles(config, filesToDownload, logger)
+	logger.Info("Download completed in %v", time.Since(processStart))
 }
 
 // Given a config and a list of files, download them
-func downloadFiles(config GatherConfig, filesToDownload []string) {
-	if filesToDownload == nil {
-		downloadFile(config.DownloadHost, config.DownloadName)
+func downloadFiles(config GatherConfig, files []string, logger lumberjack.Logger) {
+	if files == nil {
+		downloadFile(config.DownloadHost, config.DownloadName, logger)
 	} else {
-		for _, file := range filesToDownload {
+		for _, file := range files {
 			downloadLink := config.DownloadRoot + "/" + file
 
-			filePath := "./" + config.DestinationFilePrefix + file
-			downloadFile(downloadLink, filePath)
+			path := "./" + config.DestinationFilePrefix + file
+			logger.Info("Downloading %v", path)
+			downloadFile(downloadLink, path, logger)
 		}
 	}
 }
 
 // Given a uri and a file path, get the data and save to the path
-func downloadFile(downloadLink string, filePath string) error {
-	lumberjack.Info("Getting response from " + downloadLink)
-
+func downloadFile(downloadLink string, path string, logger lumberjack.Logger) error {
 	response, err := http.Get(downloadLink)
 	if err != nil {
-		lumberjack.Panic("Error Getting %v: %v", downloadLink, err)
+		logger.Panic("Error Getting %v: %v", downloadLink, err)
 	}
 	defer response.Body.Close()
 
-	lumberjack.Info("Downloading " + downloadLink + " to " + filePath)
-
-	downloadHandle, err := os.Create(filePath)
+	downloadHandle, err := os.Create(path)
 	if err != nil {
-		lumberjack.Panic("Error creating file %v", err)
+		logger.Panic("Error creating file %v", err)
 	}
 	defer downloadHandle.Close()
 
-	go trackDownload(response.ContentLength, filePath)
+	go trackDownload(response.ContentLength, path, logger)
 
 	_, err = io.Copy(downloadHandle, response.Body)
 	if err != nil {
-		lumberjack.Error("Failed to download file %v", downloadLink)
+		logger.Error("Failed to download file %v", downloadLink)
 	}
 
-	lumberjack.Info("Finished downloading %v", downloadLink)
+	logger.Info("Finished downloading %v", downloadLink)
 	return err
-}
-
-func remoteFileList(config GatherConfig) *http.Response {
-	lumberjack.Info("Calling Get on %v", config.FileListHost)
-
-	response, err := http.Get(config.FileListHost)
-	if err != nil {
-		lumberjack.Panic("Error in Get: ", err)
-	}
-
-	return response
 }
 
 // Given the config, reach out to the file list host and identify what files to
 // download
-func filesToDownload(config GatherConfig) []string {
+func filesToDownload(config GatherConfig, logger lumberjack.Logger) []string {
 	var filesToDownload []string
 
 	if config.FileListHost != "" {
-		matchingFiles := findMatchingFiles(config.FilePattern, remoteFileList(config))
+		remoteFiles, err := http.Get(config.FileListHost)
+		if err != nil {
+			logger.Panic("Failed to get list of files: %v", err)
+		}
+		matchingFiles, err := findMatchingFiles(config.FilePattern, remoteFiles)
+		if err != nil {
+			logger.Panic("Failed to find matching files: %v", err)
+		}
 		filesToDownload = pickFilesToGet(matchingFiles, config.FilesToGet)
 	}
 
-	lumberjack.Info("Files to download: %v", filesToDownload)
 	return filesToDownload
 }
 
 // Given a string to match and an http response, return matching files from response
-func findMatchingFiles(stringToFind string, response *http.Response) []string {
+func findMatchingFiles(toFind string, response *http.Response) ([]string, error) {
 	defer response.Body.Close()
 
-	fileRegexp := regexp.MustCompile(stringToFind)
+	fileRegexp := regexp.MustCompile(toFind)
 	scanner := bufio.NewScanner(response.Body)
 	var matchingFiles []string
 
 	for scanner.Scan() {
 		match := fileRegexp.FindAllStringSubmatch(scanner.Text(), 1)
 		if len(match) > 0 {
-			lumberjack.Info("Found match: %v", match[0])
 			matchingFiles = append(matchingFiles, match[0][1])
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		lumberjack.Panic("Error in scanning response: ", err)
-	}
-
-	return matchingFiles
+	return matchingFiles, scanner.Err()
 }
 
 // Given a list of file and a directive for which ones to return, return the
@@ -169,7 +158,7 @@ func pickFilesToGet(files []string, filesToGet string) []string {
 		case "all":
 			pickedFiles = files
 		default:
-			lumberjack.Panic("Don't know which 'files to get'; update config with key set to 'latest' or 'all'")
+			panic("Don't know which files to pick; config 'FilesToGet' should be 'latest' or 'all'")
 		}
 	}
 
@@ -181,16 +170,17 @@ func printDocs() {
 	command := exec.Command("godoc", "-src", "github.com/pladdy/gather")
 	output, err := command.Output()
 	if err != nil {
-		lumberjack.Warn("I tried to print out the godoc docs but it didn't work.  Sorry.")
+		os.Stdout.Write([]byte(fmt.Sprintf("Unable to print docs: %v", err)))
 	}
 
-	lumberjack.Error(fmt.Sprintf("%s", output))
+	os.Stderr.Write([]byte(fmt.Sprintf("%s", output)))
 }
 
-// Given a ContentLength and a file, peridically log how much is downloaded
-func trackDownload(contentLength int64, filePath string) {
+// Given a ContentLength, a file, and a logger, peridically log how much is
+// downloaded
+func trackDownload(contentLength int64, filePath string, logger lumberjack.Logger) {
 	if contentLength == -1 {
-		lumberjack.Warn("Content-Length not available, can't track download")
+		logger.Warn("Content-Length not available, can't track download")
 		return
 	}
 
@@ -202,36 +192,30 @@ func trackDownload(contentLength int64, filePath string) {
 
 		fileInfo, err := os.Stat(filePath)
 		if err != nil {
-			lumberjack.Warn("Couldn't get info on file %v; not tracking", filePath)
+			logger.Warn("Couldn't get info on file %v; not tracking", filePath)
 		}
 
 		fileSize = fileInfo.Size()
 		progress := float64(fileSize) / float64(contentLength) * 100
-		lumberjack.Info("Download progress: %.2f%%", progress)
+		logger.Info("Download progress: %.2f%%", progress)
 	}
 }
 
 // Given a JSON config file name, read in the file and return a go lang
 // data structure
 func unmarshalGatherConfig(fileName string, theTime time.Time) GatherConfig {
-	lumberjack.Info("Reading in config " + fileName)
-
 	contents, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		lumberjack.Fatal("Couldn't read config file.  Contents: %v", contents)
+		panic("Couldn't read config file.  Contents: " + string(contents))
 	}
-
-	lumberjack.Info("Replacing time vars in config")
 
 	replacedContents :=
 		timepiece.ReplaceTime(string(contents), timepiece.TimeToTimePiece(theTime))
 
-	lumberjack.Info("Unmarshalling config from JSON")
-
 	var config GatherConfig
 	err = json.Unmarshal([]byte(replacedContents), &config)
 	if err != nil {
-		lumberjack.Fatal("Failed to Unmarshal JSON; contents: %v", config)
+		panic("Failed to Unmarshal JSON")
 	}
 
 	return config
