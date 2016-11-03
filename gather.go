@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pladdy/lumberjack"
@@ -28,7 +29,6 @@ type GatherConfig struct {
 
 	// Simple download
 	DownloadHost string // Host to download from
-	DownloadName string // Name to be given to download file
 
 	// Scrape download
 	FileListHost string // Host to scrape files from
@@ -57,25 +57,17 @@ func main() {
 	filesToDownload := filesToDownload(config)
 	lumberjack.Info("Files to download: %v", filesToDownload)
 
-	if len(filesToDownload) == 0 && config.FileListHost != "" {
-		lumberjack.Info("No files to download")
-		os.Exit(0)
-	}
-
 	downloadFiles(config, filesToDownload)
 	lumberjack.Info("Download completed in %v", time.Since(processStart))
 }
 
 // Given a config and a list of files, download them
-func downloadFiles(config GatherConfig, files []string) {
-	if files == nil {
-		downloadFile(config.DownloadHost, config.DownloadName)
-	} else {
-		for _, file := range files {
-			downloadLink := config.DownloadRoot + "/" + file
-			path := "./" + config.DestinationFilePrefix + file
-			downloadFile(downloadLink, path)
-		}
+func downloadFiles(config GatherConfig, remoteFiles []string) {
+	for _, remoteFile := range remoteFiles {
+		parts := strings.Split(remoteFile, "/")
+		fileName := parts[len(parts)-1]
+		path := "./" + config.DestinationFilePrefix + fileName
+		downloadFile(remoteFile, path)
 	}
 }
 
@@ -120,9 +112,14 @@ func filesToDownload(config GatherConfig) (filesToDownload []string) {
 			lumberjack.Panic("Failed to find matching files: %v", err)
 		}
 
+		// prepend the root path to the files scraped
+		for i, file := range matchingFiles {
+			matchingFiles[i] = config.DownloadRoot + "/" + file
+		}
 		return pickFilesToGet(matchingFiles, config.FilesToGet)
+	} else {
+		return []string{config.DownloadHost}
 	}
-	return
 }
 
 // Given a string to match and an http response, return matches from response
@@ -233,7 +230,7 @@ func unmarshalGatherConfig(fileName string, theTime time.Time) GatherConfig {
 func (config *GatherConfig) isValid() bool {
 	itIsValid := false
 
-	if config.DownloadHost != "" && config.DownloadName != "" {
+	if config.DownloadHost != "" {
 		itIsValid = true
 	}
 

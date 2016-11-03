@@ -3,5 +3,5 @@
   "DownloadRoot": "http://data.ris.ripe.net/rrc00/$Year.$Month/",
   "FilePattern": "href=\"(bview.$Year$PaddedMonth$PaddedDay.*.gz)\"",
   "FilesToGet": "latest",
-  "DestinationFilePrefix": "ripe_rrc_00_"
+  "DestinationFilePrefix": "$Year_$PaddedMonth_$PaddedDay_ripe_rrc_00_"
 }
