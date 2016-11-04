@@ -1,7 +1,7 @@
 {
   "FileListHost": "http://data.ris.ripe.net/rrc06/$Year.$Month/",
   "DownloadRoot": "http://data.ris.ripe.net/rrc06/$Year.$Month/",
-  "FilePattern": "href=\"(bview.$Year$PaddedMonth$PaddedDay.*.gz)\"",
-  "FilesToGet": "latest",
+  "FilePattern": "bview.$Year$PaddedMonth$PaddedDay.*?.gz",
+  "WhichFilesToGet": "last",
   "DestinationFilePrefix": "$Year_$PaddedMonth_$PaddedDay_ripe_rrc_06_"
 }
