@@ -1,5 +1,4 @@
 {
-  "Type": "Scrape",
   "FileListHost": "http://data.ris.ripe.net/rrc06/$Year.$Month/",
   "FilePattern": "bview.$Year$PaddedMonth$PaddedDay.*?.gz",
   "WhichFilesToGet": "last",

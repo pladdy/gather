@@ -1,4 +1,5 @@
 {
+  "Type": "Simple",
   "DownloadHost": "http://malc0de.com/bl/IP_Blacklist.txt",
   "DestinationFilePrefix": "$Year_$PaddedMonth_$PaddedDay_malc0de_blacklist_"
 }

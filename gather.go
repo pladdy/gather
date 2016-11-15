@@ -4,10 +4,8 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,26 +15,7 @@ import (
 	"time"
 
 	"github.com/pladdy/lumberjack"
-	"github.com/pladdy/timepiece"
 )
-
-// A gather config has settings that dictate what hosts have data pulled
-// from, the files that should be gathered, etc.
-//
-// Keys grouped together are required to be set in the config
-type GatherConfig struct {
-	DestinationFilePrefix string
-	Type                  string
-
-	// Simple download
-	DownloadHost string // Host to download from
-
-	// Scrape download
-	DownloadRoot    string // For scraping, the root to use for matching files
-	FileListHost    string // Host to scrape files from
-	FilePattern     string // Pattern to look for when scraping for files
-	WhichFilesToGet string // 'all' or 'latest'; needed for scraping
-}
 
 func main() {
 	lumberjack.StartLogging()
@@ -47,7 +26,7 @@ func main() {
 	}
 
 	lumberjack.Info("Reading in config " + os.Args[1])
-	config := unmarshalGatherConfig(os.Args[1], time.Now())
+	config := unmarshalConfig(os.Args[1], time.Now())
 
 	if config.isValid() != true {
 		lumberjack.Error("Invalid config.  Update config according to GatherConfig struct.")
@@ -121,7 +100,7 @@ func filesToDownload(config GatherConfig) []string {
 
 		// prepend the root path to the files scraped
 		for i, file := range matchingFiles {
-			matchingFiles[i] = config.DownloadRoot + "/" + file
+			matchingFiles[i] = config.FileListHost + "/" + file
 		}
 		return matchingFiles
 	} else {
@@ -223,49 +202,4 @@ func uniqueStrings(stringList []string) (uniques []string) {
 	}
 	lumberjack.Debug("Unique List: %v", uniques)
 	return
-}
-
-// Given a JSON config file name, read in the file and return a go lang
-// data structure
-func unmarshalGatherConfig(fileName string, theTime time.Time) GatherConfig {
-	contents, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		lumberjack.Panic("Couldn't read config file.: %v", err)
-	}
-
-	contentsString := string(contents)
-	lumberjack.Debug("Contents of config:\n" + contentsString)
-
-	replacedContents :=
-		timepiece.ReplaceTime(contentsString, timepiece.TimeToTimePiece(theTime))
-
-	if contentsString != replacedContents {
-		lumberjack.Debug("New contents:\n" + replacedContents)
-	}
-
-	var config GatherConfig
-	err = json.Unmarshal([]byte(replacedContents), &config)
-	if err != nil {
-		lumberjack.Panic("Failed to Unmarshal JSON: %v", err)
-	}
-
-	return config
-}
-
-// Given a GatherCOnfig, validate it
-func (config *GatherConfig) isValid() bool {
-	itIsValid := false
-
-	if config.DownloadHost != "" {
-		itIsValid = true
-	}
-
-	if config.FileListHost != "" &&
-		config.DownloadRoot != "" &&
-		config.FilePattern != "" &&
-		config.WhichFilesToGet != "" {
-		itIsValid = true
-	}
-
-	return itIsValid
 }
