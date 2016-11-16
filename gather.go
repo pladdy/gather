@@ -82,7 +82,7 @@ func downloadFile(downloadLink string, path string) error {
 // Given the gather config, return the files on a host (scrape) or return the
 // uri (simple config), to download
 func filesToDownload(config GatherConfig) []string {
-	if config.FileListHost != "" {
+	if config.Type == "Scrape" {
 		response, err := http.Get(config.FileListHost)
 		if err != nil {
 			lumberjack.Panic("Failed to get list of files: %v", err)
@@ -108,11 +108,11 @@ func filesToDownload(config GatherConfig) []string {
 	}
 }
 
-// Given a string and io.ReadCloser, scan through the reader and return any
+// Given a string and io.Reader, scan through the reader and return any
 // strings that match the filter
-func filterReader(filter string, rc io.Reader) ([]string, error) {
+func filterReader(filter string, reader io.Reader) ([]string, error) {
 	pattern := regexp.MustCompile(filter)
-	scanner := bufio.NewScanner(rc)
+	scanner := bufio.NewScanner(reader)
 	var matches []string
 
 	for scanner.Scan() {
@@ -133,7 +133,7 @@ func filterReader(filter string, rc io.Reader) ([]string, error) {
 // Given a list of strings, pick the one(s) you want based on named quantity
 //    "all"    -> give me all of them
 //    "first"  -> give me the first one after sorting
-//    "last" -> give me the last one after sorting
+//    "last"   -> give me the last one after sorting
 func pickWhichStrings(stringList []string, which string) (picked []string) {
 	lumberjack.Debug("Which to pick: %v", which)
 
