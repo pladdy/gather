@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+SOURCE_DIR=$(pwd $(dirname $0))
+go_files=$(ls ${SOURCE_DIR}/*.go | grep -v _test.go)
+go run ${go_files} $@
