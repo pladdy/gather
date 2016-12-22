@@ -22,7 +22,7 @@ type ScrapeOptions struct {
 }
 
 // init depends on a global parser to add commands to.  It should be declared in
-// the main package's main() function.
+// the main package
 func init() {
 	// Create download command
 	_, err := parser.AddCommand(

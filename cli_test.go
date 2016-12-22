@@ -39,3 +39,10 @@ func TestIsTesting(t *testing.T) {
 		}
 	}
 }
+
+func TestSynopsis(t *testing.T) {
+	synopsis := synopsis()
+	if synopsis == "" {
+		t.Error("Got:", "", "Expected: a synopsis...")
+	}
+}
