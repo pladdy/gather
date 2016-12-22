@@ -29,7 +29,7 @@ func TestFilesToScrape(t *testing.T) {
 	}
 
 	// Scrape files
-	resultFiles := filesToScrape(scrapeOpts)
+	resultFiles := scrapedFiles(scrapeOpts)
 	expectedFiles := []string{"http://localhost:8080/scrape_test_0.txt",
 		"http://localhost:8080/scrape_test_1.txt"}
 

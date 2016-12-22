@@ -43,11 +43,8 @@ func main() {
 	// Perform command
 	switch commandToRun(downloadOptions, scrapeOptions) {
 	case "scrape":
-		files := filesToScrape(scrapeOptions)
-		lumberjack.Info("Files to scrape: %v", files)
-		downloadFiles(files, commonOptions.SaveAs)
+		downloadFiles(scrapedFiles(scrapeOptions), commonOptions.SaveAs)
 	case "download":
-		lumberjack.Info("File to download: %v", downloadOptions.URI)
 		downloadFiles([]string{downloadOptions.URI}, commonOptions.SaveAs)
 	}
 
@@ -56,6 +53,8 @@ func main() {
 
 // Given the CLI options and a list of files, download the files
 func downloadFiles(uris []string, saveAs string) {
+	lumberjack.Info("URIs to download: %v", uris)
+
 	i := 0
 	for _, uri := range uris {
 		path := saveAs

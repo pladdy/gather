@@ -13,7 +13,7 @@ import (
 
 // Given the scrape options, find files to scrape that match the options
 // provided.
-func filesToScrape(opts ScrapeOptions) []string {
+func scrapedFiles(opts ScrapeOptions) []string {
 	response, err := http.Get(opts.URI)
 	if err != nil {
 		lumberjack.Panic("Failed to get list of files: %v", err)

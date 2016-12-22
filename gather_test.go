@@ -35,8 +35,23 @@ func TestDownloadFiles(t *testing.T) {
 		http.ListenAndServe(":8080", http.FileServer(http.Dir("/tmp")))
 	}()
 
+	// Multiple files
 	uris := []string{"http://localhost:8080", "http://localhost:8080"}
 	expectedDownloads := []string{"./test_0.html", "./test_1.html"}
+	downloadFiles(uris, "./test.html")
+
+	// check to make sure content was downloaded
+	for _, file := range expectedDownloads {
+		fileInfo, _ := os.Stat(file)
+		if fileInfo.Size() < 0 {
+			t.Error("File size of download should be > 0")
+		}
+		os.Remove(file)
+	}
+
+	// Single file
+	uris = []string{"http://localhost:8080"}
+	expectedDownloads = []string{"./test.html"}
 	downloadFiles(uris, "./test.html")
 
 	// check to make sure content was downloaded
