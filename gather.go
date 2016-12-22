@@ -2,10 +2,13 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jessevdk/go-flags"
@@ -31,6 +34,7 @@ func main() {
 	_, err := parser.Parse()
 
 	if flagsErr, ok := err.(*flags.Error); ok && flagsErr.Type == flags.ErrHelp {
+		fmt.Println(synopsis())
 		os.Exit(0)
 	} else if flagsErr != nil && isTesting(os.Args[0]) == false {
 		os.Exit(1)
@@ -41,23 +45,22 @@ func main() {
 	case "scrape":
 		files := filesToScrape(scrapeOptions)
 		lumberjack.Info("Files to scrape: %v", files)
-		downloadFiles(commonOptions.SaveAs, files)
+		downloadFiles(files, commonOptions.SaveAs)
 	case "download":
 		lumberjack.Info("File to download: %v", downloadOptions.URI)
-		downloadFiles(commonOptions.SaveAs, []string{downloadOptions.URI})
+		downloadFiles([]string{downloadOptions.URI}, commonOptions.SaveAs)
 	}
 
 	lumberjack.Info("Process completed in %v", time.Since(processStart))
 }
 
 // Given the CLI options and a list of files, download the files
-func downloadFiles(saveAs string, uris []string) {
+func downloadFiles(uris []string, saveAs string) {
 	i := 0
 	for _, uri := range uris {
 		path := saveAs
 		if len(uris) > 1 {
-			s := strconv.Itoa(i)
-			path = path + "_" + s
+			path = incrementPath(path, i)
 		}
 		downloadFile(uri, path)
 		i += 1
@@ -89,6 +92,24 @@ func downloadFile(uri string, path string) error {
 
 	lumberjack.Info("Finished downloading %v", uri)
 	return err
+}
+
+// Add integer "incrementer" to the filename
+func incrementPath(filePath string, i int) string {
+	dir := path.Dir(filePath)
+	fileName := path.Base(filePath)
+	s := strconv.Itoa(i)
+
+	// Split filename on extension, add suffix to next to last item, rejoin
+	if path.Ext(filePath) == "" {
+		fileName = fileName + "_" + s
+	} else {
+		filePieces := strings.Split(fileName, ".")
+		filePieces[len(filePieces)-2] = filePieces[len(filePieces)-2] + "_" + s
+		fileName = strings.Join(filePieces, ".")
+	}
+
+	return path.Join(dir, fileName)
 }
 
 // Given a ContentLength and a file peridically log how much is downloaded

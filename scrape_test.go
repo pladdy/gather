@@ -2,9 +2,48 @@ package main
 
 import (
 	"bytes"
+	"net/http"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/pladdy/lumberjack"
 )
+
+func TestFilesToScrape(t *testing.T) {
+	// start logging and start a server
+	lumberjack.Hush()
+	go func() {
+		http.ListenAndServe(":8080", http.FileServer(http.Dir("/tmp")))
+	}()
+
+	var scrapeOpts = ScrapeOptions{"http://localhost:8080", "scrape_test_\\d.txt", "all"}
+	filesToCreate := []string{"/tmp/scrape_test_0.txt", "/tmp/scrape_test_1.txt"}
+
+	// Create files
+	for _, file := range filesToCreate {
+		_, err := os.Create(file)
+		if err != nil {
+			t.Error("Failed to create %v", file)
+		}
+	}
+
+	// Scrape files
+	resultFiles := filesToScrape(scrapeOpts)
+	expectedFiles := []string{"http://localhost:8080/scrape_test_0.txt",
+		"http://localhost:8080/scrape_test_1.txt"}
+
+	for i, resultFile := range resultFiles {
+		if resultFile != expectedFiles[i] {
+			t.Error("Got:", resultFile, "Expected:", expectedFiles[i])
+		}
+	}
+
+	// Rm files
+	for _, file := range expectedFiles {
+		os.Remove(file)
+	}
+}
 
 func TestFilterReader(t *testing.T) {
 	var filterTests = []struct {

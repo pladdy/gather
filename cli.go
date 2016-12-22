@@ -27,7 +27,7 @@ func init() {
 	// Create download command
 	_, err := parser.AddCommand(
 		"download",
-		"Download a url contents to file",
+		"Download a URL contents to file",
 		"Given a URL, download it's contents to a file",
 		&downloadOptions)
 
@@ -49,12 +49,8 @@ func init() {
 	}
 }
 
-// Check first arg and see if it ends in .test; if so tests are being run
-func isTesting(firstArg string) bool {
-	matched, _ := regexp.MatchString(".test$", firstArg)
-	return matched
-}
-
+// Identify what command was given...there has to be a better way to do this
+// TODO: find a better way...
 func commandToRun(dl DownloadOptions, sc ScrapeOptions) string {
 	if dl.URI != "" {
 		return "download"
@@ -62,4 +58,16 @@ func commandToRun(dl DownloadOptions, sc ScrapeOptions) string {
 		return "scrape"
 	}
 	return ""
+}
+
+// Check first arg and see if it ends in .test; if so tests are being run
+func isTesting(firstArg string) bool {
+	matched, _ := regexp.MatchString(".test$", firstArg)
+	return matched
+}
+
+func synopsis() string {
+	return "Synopsis:\n" +
+		"  gather is a CLI for downloading URIs.\n\n" +
+		"  Options passed into gather can have TimePiece variable placeholders."
 }
