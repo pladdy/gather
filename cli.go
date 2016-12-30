@@ -67,7 +67,5 @@ func isTesting(firstArg string) bool {
 }
 
 func synopsis() string {
-	return "Synopsis:\n" +
-		"  gather is a CLI for downloading URIs.\n\n" +
-		"  Options passed into gather can have TimePiece variable placeholders."
+	return "Synopsis:\n  gather is a CLI for downloading URIs."
 }
